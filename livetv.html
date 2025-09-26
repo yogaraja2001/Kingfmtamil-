@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ta">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KING FM TAMIL - நேரலை தொலைக்காட்சி</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #111827;
+        }
+
+        .live-indicator-dot {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.4;
+            }
+            100% {
+                opacity: 1;
+            }
+        }
+
+        .modal {
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+
+        .modal-content {
+            transition: transform 0.3s ease;
+        }
+        
+        #watermark-overlay {
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.8);
+            font-weight: bold;
+            opacity: 0.5;
+            pointer-events: none;
+            transition: transform 0.2s ease-in-out;
+        }
+    </style>
+</head>
+
+<body class="flex items-center justify-center min-h-screen p-4 bg-gray-900">
+
+    <main class="w-full max-w-6xl">
+        <div id="player-container" class="relative w-full aspect-video bg-black rounded-lg shadow-2xl overflow-hidden">
+            <!-- M3U8 Player -->
+            <video id="hls-player" class="w-full h-full hidden" controls autoplay muted playsinline></video>
+            
+            <!-- iframe Player -->
+            <iframe id="iframe-player" class="w-full h-full hidden" src="" frameborder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowfullscreen></iframe>
+
+            <!-- Logo (Top Left) -->
+            <img id="logo-overlay" src="https://placehold.co/150x80/transparent/white?text=LOGO" alt="Logo" class="absolute" 
+                 style="top: 2%; left: 2%; width: 120px; transform: scale(1);" />
+
+            <!-- "Live" Text (Top Right) -->
+            <div id="live-indicator-overlay" class="absolute flex items-center space-x-2 bg-red-600 text-white px-3 py-1 rounded-md text-sm font-bold"
+                 style="top: 2%; right: 2%; transform: scale(1);">
+                <span class="relative flex h-3 w-3">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-3 w-3 bg-white"></span>
+                </span>
+                <span>நேரலை</span>
+            </div>
+
+            <!-- Watermark -->
+            <div id="watermark-overlay" class="absolute inset-0 flex items-center justify-center text-white text-5xl"
+                style="font-size: clamp(2rem, 8vw, 5rem); transform: scale(1);">
+                KING FM TAMIL
+            </div>
+
+            <!-- Clock (Bottom Right) -->
+            <div id="clock-overlay" class="absolute bottom-2 right-4 text-white font-sans text-lg font-semibold" 
+                 style="background-color: rgba(0,0,0,0); text-shadow: 1px 1px 4px #000;">
+            </div>
+            
+             <div id="stream-offline-message" class="absolute inset-0 flex items-center justify-center bg-black bg-opacity-80 text-white text-2xl font-bold hidden">
+                நேரலை தற்காலிகமாக நிறுத்தப்பட்டுள்ளது.
+            </div>
+        </div>
+    </main>
+
+    <!-- Admin Panel Button -->
+    <button id="admin-login-button"
+        class="fixed top-4 right-4 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-blue-700 transition">
+        Admin Panel
+    </button>
+
+    <!-- Login Modal -->
+    <div id="login-modal" class="modal fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 invisible opacity-0">
+        <div class="modal-content bg-gray-800 p-8 rounded-lg shadow-xl w-full max-w-sm transform scale-95">
+            <h2 class="text-2xl font-bold text-white mb-6 text-center">அட்மின் உள்நுழைவு</h2>
+            <form id="login-form">
+                <div class="mb-4">
+                    <label for="username" class="block text-gray-300 mb-2">Username</label>
+                    <input type="password" id="username"
+                        class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                        autocomplete="current-password"
+                        value="kavil">
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="block text-gray-300 mb-2">Password</label>
+                    <input type="password" id="password"
+                        class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
+                        autocomplete="current-password"
+                        value="kavil1234">
+                </div>
+                <button type="submit"
+                    class="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition font-semibold">
+                    உள்நுழைக
+                </button>
+                 <button type="button" id="close-login-modal" class="w-full bg-gray-600 text-white py-2 mt-2 rounded-lg hover:bg-gray-700 transition font-semibold">
+                    மூடு
+                </button>
+                <p id="login-error" class="text-red-500 text-center mt-4"></p>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Admin Panel Modal -->
+    <div id="admin-panel" class="modal fixed inset-0 bg-black bg-opacity-70 z-50 invisible opacity-0 overflow-y-auto p-4">
+        <div class="modal-content bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-3xl mx-auto my-8 transform scale-95">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-white">கட்டுப்பாட்டு அறை (Admin Panel)</h2>
+                <button id="close-admin-panel" class="text-gray-400 hover:text-white">&times;</button>
+            </div>
+            
+            <div class="space-y-6">
+                <!-- Live Stream Control -->
+                <div class="bg-gray-700 p-4 rounded-lg">
+                    <h3 class="text-lg font-semibold text-white mb-3">நேரலை கட்டுப்பாடு</h3>
+                    <div class="flex items-center space-x-4 mb-3">
+                        <label for="stream-url" class="text-gray-300">நேரலை இணைப்பு (URL):</label>
+                        <input type="text" id="stream-url" placeholder="YouTube, Facebook, M3U8 or other live URL"
+                               class="flex-grow bg-gray-600 border border-gray-500 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                     <div class="flex items-center space-x-4">
+                        <label class="text-gray-300">நேரலை நிலை:</label>
+                        <label class="relative inline-flex items-center cursor-pointer">
+                          <input type="checkbox" id="stream-status-toggle" class="sr-only peer">
+                          <div class="w-11 h-6 bg-gray-500 rounded-full peer peer-focus:ring-4 peer-focus:ring-blue-800 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                          <span id="stream-status-text" class="ml-3 text-sm font-medium text-gray-300">Off</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Customization -->
+                <div class="bg-gray-700 p-4 rounded-lg">
+                     <h3 class="text-lg font-semibold text-white mb-3">வடிவமைப்பு கட்டுப்பாடு</h3>
+                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                         <div>
+                            <label for="logo-upload" class="block text-gray-300 mb-2">லோகோவை பதிவேற்றுக:</label>
+                            <input type="file" id="logo-upload" accept="image/*" class="text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700">
+                            <div class="mt-3">
+                                <label for="logo-size" class="text-gray-300">லோகோ அளவு:</label>
+                                <input type="range" id="logo-size" min="0.5" max="2.5" step="0.1" value="1" class="w-full">
+                            </div>
+                         </div>
+                         <div>
+                             <label for="live-indicator-size" class="text-gray-300">"நேரலை" அளவு:</label>
+                             <input type="range" id="live-indicator-size" min="0.5" max="2.5" step="0.1" value="1" class="w-full">
+                         </div>
+                     </div>
+                     <div class="mt-4">
+                        <label for="watermark-text" class="text-gray-300">வாட்டர்மார்க் எழுத்து:</label>
+                        <input type="text" id="watermark-text" value="KING FM TAMIL"
+                               class="w-full mt-1 bg-gray-600 border border-gray-500 rounded px-3 py-2 text-white focus:outline-none focus:border-blue-500">
+                    </div>
+                     <div class="mt-4">
+                        <label for="watermark-size" class="text-gray-300">வாட்டர்மார்க் அளவு:</label>
+                        <input type="range" id="watermark-size" min="0.5" max="2.0" step="0.1" value="1" class="w-full">
+                    </div>
+                </div>
+                
+                <!-- Public Link Generator -->
+                <div class="bg-gray-700 p-4 rounded-lg">
+                    <h3 class="text-lg font-semibold text-white mb-3">பொது இணைப்பு ஜெனரேட்டர்</h3>
+                    <p class="text-xs text-gray-400 mb-2">இந்த இணைப்பை மற்றவர்களுடன் பகிரவும். இதில் அட்மின் பட்டன் இருக்காது.</p>
+                    <div class="flex items-center space-x-2">
+                        <input type="text" id="public-url" readonly class="w-full bg-gray-900 border border-gray-500 rounded px-3 py-2 text-gray-300">
+                        <button id="copy-public-url" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 shrink-0">நகலெடு</button>
+                    </div>
+                </div>
+
+                <div class="flex justify-end space-x-4">
+                    <button id="save-settings" class="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition font-semibold">
+                        சேமி
+                    </button>
+                    <button id="cancel-admin-panel" class="bg-gray-600 text-white px-6 py-2 rounded-lg hover:bg-gray-700 transition font-semibold">
+                        ரத்துசெய்
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, setDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase config
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app, db, auth, userId, hls;
+
+        const elements = {
+            hlsPlayer: document.getElementById('hls-player'),
+            iframePlayer: document.getElementById('iframe-player'),
+            liveIndicatorOverlay: document.getElementById('live-indicator-overlay'),
+            logoOverlay: document.getElementById('logo-overlay'),
+            watermarkOverlay: document.getElementById('watermark-overlay'),
+            clockOverlay: document.getElementById('clock-overlay'),
+            streamOfflineMessage: document.getElementById('stream-offline-message'),
+            adminLoginButton: document.getElementById('admin-login-button'),
+            loginModal: document.getElementById('login-modal'),
+            closeLoginModal: document.getElementById('close-login-modal'),
+            loginForm: document.getElementById('login-form'),
+            loginError: document.getElementById('login-error'),
+            adminPanel: document.getElementById('admin-panel'),
+            closeAdminPanel: document.getElementById('close-admin-panel'),
+            cancelAdminPanel: document.getElementById('cancel-admin-panel'),
+            streamUrlInput: document.getElementById('stream-url'),
+            streamStatusToggle: document.getElementById('stream-status-toggle'),
+            streamStatusText: document.getElementById('stream-status-text'),
+            logoUpload: document.getElementById('logo-upload'),
+            logoSizeSlider: document.getElementById('logo-size'),
+            liveIndicatorSizeSlider: document.getElementById('live-indicator-size'),
+            watermarkTextInput: document.getElementById('watermark-text'),
+            watermarkSizeSlider: document.getElementById('watermark-size'),
+            publicUrlInput: document.getElementById('public-url'),
+            copyPublicUrlButton: document.getElementById('copy-public-url'),
+            saveSettingsButton: document.getElementById('save-settings'),
+        };
+
+        const openModal = (modal) => {
+            modal.classList.remove('invisible', 'opacity-0');
+            modal.querySelector('.modal-content').classList.remove('scale-95');
+        };
+        const closeModal = (modal) => {
+            modal.classList.add('opacity-0');
+            modal.querySelector('.modal-content').classList.add('scale-95');
+            setTimeout(() => modal.classList.add('invisible'), 300);
+        };
+        
+        elements.adminLoginButton.addEventListener('click', () => openModal(elements.loginModal));
+        elements.closeLoginModal.addEventListener('click', () => closeModal(elements.loginModal));
+        elements.closeAdminPanel.addEventListener('click', () => closeModal(elements.adminPanel));
+        elements.cancelAdminPanel.addEventListener('click', () => closeModal(elements.adminPanel));
+        
+        elements.loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const username = elements.loginForm.username.value;
+            const password = elements.loginForm.password.value;
+            if (username === 'kavil' && password === 'kavil1234') {
+                elements.loginError.textContent = '';
+                closeModal(elements.loginModal);
+                openModal(elements.adminPanel);
+            } else {
+                elements.loginError.textContent = 'தவறான Username அல்லது Password.';
+            }
+        });
+        
+        function updateClock() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-GB');
+            elements.clockOverlay.textContent = timeString;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        function convertToEmbedUrl(url) {
+            if (!url) return "";
+            try {
+                const urlObj = new URL(url);
+                if (urlObj.hostname.includes('youtube.com') || urlObj.hostname.includes('youtu.be')) {
+                    const videoId = urlObj.searchParams.get('v') || urlObj.pathname.split('/').pop();
+                    return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&enablejsapi=1`;
+                }
+                if (urlObj.hostname.includes('facebook.com')) {
+                    return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=0&autoplay=1&mute=1`;
+                }
+                return url;
+            } catch (error) {
+                console.warn("Could not parse as standard URL, returning as is:", url);
+                return url;
+            }
+        }
+
+        function loadStream(url) {
+            if (hls) { hls.destroy(); hls = null; }
+            if (url && url.toLowerCase().includes('.m3u8')) {
+                elements.iframePlayer.classList.add('hidden');
+                elements.iframePlayer.src = '';
+                elements.hlsPlayer.classList.remove('hidden');
+                if (Hls.isSupported()) {
+                    hls = new Hls();
+                    hls.loadSource(url);
+                    hls.attachMedia(elements.hlsPlayer);
+                    hls.on(Hls.Events.MANIFEST_PARSED, () => elements.hlsPlayer.play());
+                } else if (elements.hlsPlayer.canPlayType('application/vnd.apple.mpegurl')) {
+                    elements.hlsPlayer.src = url;
+                    elements.hlsPlayer.addEventListener('loadedmetadata', () => elements.hlsPlayer.play());
+                }
+            } else {
+                elements.hlsPlayer.classList.add('hidden');
+                elements.hlsPlayer.src = '';
+                elements.iframePlayer.classList.remove('hidden');
+                elements.iframePlayer.src = convertToEmbedUrl(url);
+            }
+        }
+        
+        function updateUI(settings) {
+            if (settings.isLive) {
+                loadStream(settings.streamUrl);
+                elements.streamOfflineMessage.classList.add('hidden');
+            } else {
+                loadStream("");
+                elements.iframePlayer.classList.add('hidden');
+                elements.hlsPlayer.classList.add('hidden');
+                elements.streamOfflineMessage.classList.remove('hidden');
+            }
+
+            elements.logoOverlay.src = settings.logoDataUrl || 'https://placehold.co/150x80/transparent/white?text=LOGO';
+            elements.logoOverlay.style.transform = `scale(${settings.logoSize || 1})`;
+            elements.liveIndicatorOverlay.style.transform = `scale(${settings.liveIndicatorSize || 1})`;
+            elements.watermarkOverlay.textContent = settings.watermarkText || 'KING FM TAMIL';
+            elements.watermarkOverlay.style.transform = `scale(${settings.watermarkSize || 1})`;
+
+            // Admin panel values
+            elements.streamUrlInput.value = settings.streamUrl || '';
+            elements.streamStatusToggle.checked = settings.isLive || false;
+            elements.streamStatusText.textContent = settings.isLive ? 'On' : 'Off';
+            elements.logoSizeSlider.value = settings.logoSize || 1;
+            elements.liveIndicatorSizeSlider.value = settings.liveIndicatorSize || 1;
+            elements.watermarkTextInput.value = settings.watermarkText || 'KING FM TAMIL';
+            elements.watermarkSizeSlider.value = settings.watermarkSize || 1;
+        }
+        
+        function generateAndDisplayPublicLink() {
+            const baseUrl = window.location.origin + window.location.pathname;
+            const publicUrl = `${baseUrl}?view=public`;
+            elements.publicUrlInput.value = publicUrl;
+        }
+
+        elements.copyPublicUrlButton.addEventListener('click', () => {
+            elements.publicUrlInput.select();
+            try {
+                document.execCommand('copy');
+                elements.copyPublicUrlButton.textContent = 'நகலெடுக்கப்பட்டது!';
+                setTimeout(() => { elements.copyPublicUrlButton.textContent = 'நகலெடு'; }, 2000);
+            } catch (err) {
+                console.error('Failed to copy text
+                </body>
+                </heder>
+                </html>
